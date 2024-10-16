@@ -1,0 +1,1 @@
+console.log(process.env.BANK_USER)
