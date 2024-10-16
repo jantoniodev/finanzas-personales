@@ -2,11 +2,15 @@
   "name": "banco",
   "version": "1.0.0",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "start": "node --env-file=.env src/server.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": ""
+  "description": "",
+  "dependencies": {
+    "puppeteer": "^23.6.0"
+  }
 }
