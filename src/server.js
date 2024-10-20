@@ -192,7 +192,7 @@ const app = async () => {
 
     console.log('[+] Obteniendo tarjetas de crédito')
     const creditCardsIds = await getCreditCardsIds(cookies)
-    console.log('\t[=] Tarjetas de crédito encontradas:', creditCardsIds.join(', '))
+    console.log(`\t[=] Tarjetas de crédito encontradas (${creditCardsIds.length}): \n\t\t[-] ${creditCardsIds.join('\n\t\t[-] ')}`)
 
     for (const cardId of creditCardsIds) {
         console.log(`[+] Tarjeta de crédito: ${cardId}`)
@@ -201,7 +201,7 @@ const app = async () => {
         const notBilledMovements = await getNotBilledMovements(cookies, cardId)
 
         const totalBilledAmount = calculateTotalBilledAmount(notBilledMovements, usdPrice)
-        console.log(`\t[=] Total movimientos no facturados: ${formatAmount(totalBilledAmount)}`)
+        console.log(`\t\t[=] Total movimientos no facturados: ${formatAmount(totalBilledAmount)}`)
 
         console.log(`\t[+] Obteniendo fechas de facturación`)
         const { nationalBillingDate, accountNumber } = await getBillingDates(cookies, cardId)
@@ -210,7 +210,7 @@ const app = async () => {
         const nationalBilledMovements = await getNationalBilledMovements(cookies, cardId, nationalBillingDate[0], accountNumber)
 
         const totalInstallments = calculateInstallmentsTotals(nationalBilledMovements)
-        console.log(`\t[=] Total cuotas: ${formatAmount(totalInstallments)}`)
+        console.log(`\t\t[=] Total cuotas: ${formatAmount(totalInstallments)}`)
     }
 }
 
