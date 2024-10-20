@@ -5,8 +5,12 @@ const BANK_PRODUCTS_URL = 'https://portalpersonas.bancochile.cl/mibancochile/res
 const BANK_BILLING_DATES = 'https://portalpersonas.bancochile.cl/mibancochile/rest/persona/tarjetas/estadocuenta/fechas-facturacion'
 const BANK_NOT_BILLED_MOVEMENTS = 'https://portalpersonas.bancochile.cl/mibancochile/rest/persona/tarjeta-credito-digital/movimientos-no-facturados'
 const BANK_USD_PRICE = 'https://portalpersonas.bancochile.cl/mibancochile/rest/persona/home/indices-financieros'
+const BANK_BILLED_NATIONAL_MOVEMENTS = 'https://portalpersonas.bancochile.cl/mibancochile/rest/persona/tarjetas/estadocuenta/nacional/resumen-por-fecha'
+const BANK_BILLED_INTERNATIONAL_MOVEMENTS = 'https://portalpersonas.bancochile.cl/mibancochile/rest/persona/tarjetas/estadocuenta/internacional/resumen-por-fecha'
 const BANK_USER = process.env.BANK_USER
 const BANK_PASSWORD = process.env.BANK_PASSWORD
+
+const MORE_THAN_TWO_SPACES_REGEX = /\s{2,}/g
 
 const formatCookies = (cookies) => {
     return cookies.map(cookie => {
@@ -77,6 +81,39 @@ const getBillingDates = async (cookies, cardId) => {
     }
 }
 
+const getNationalBilledMovements = async (cookies, cardId, billingDate, accountNumber) => {
+    const response = await fetch(BANK_BILLED_NATIONAL_MOVEMENTS, {
+        method: 'POST',
+        headers: {
+            'content-type': 'application/json',
+            'cookie': cookies
+        },
+        body: JSON.stringify({
+            idTarjeta: cardId,
+            fechaFacturacion: billingDate,
+            numeroCuenta: accountNumber
+        })
+    })
+
+    const data = await response.json()
+
+    return [
+            ...data.seccionOperaciones.transaccionesTarjetas,
+            ...data.seccionComprasEnCuotas.transaccionesTarjetas
+        ]
+        .filter(transaction => transaction.totales === false)
+        .map(transaction => {
+            return {
+                type: 'national',
+                amount: transaction.montoTransaccion,
+                date: transaction.fechaTransaccion,
+                description: transaction.descripcion.replaceAll(MORE_THAN_TWO_SPACES_REGEX, ' '),
+                installment: parseInt(transaction.cuotas.split('/')[0]) || 1,
+                totalInstallments: parseInt(transaction.cuotas.split('/')[1]) || 1,
+            }
+        })
+}
+
 const getNotBilledMovements = async (cookies, cardId) => {
     const response = await fetch(BANK_NOT_BILLED_MOVEMENTS, {
         method: 'POST',
@@ -91,8 +128,6 @@ const getNotBilledMovements = async (cookies, cardId) => {
 
     const data = await response.json()
 
-    const moreThanTwoSpacesRegex = /\s{2,}/g
-
     return data.listaMovNoFactur
         .filter(movement => movement.montoCompra >= 0)
         .map(movement => {
@@ -100,7 +135,7 @@ const getNotBilledMovements = async (cookies, cardId) => {
                 type: movement.origenTransaccion === 'NAC' ? 'national' : 'international',
                 amount: movement.montoCompra,
                 date: movement.fechaTransaccion,
-                description: movement.glosaTransaccion.replaceAll(moreThanTwoSpacesRegex, ' '),
+                description: movement.glosaTransaccion.replaceAll(MORE_THAN_TWO_SPACES_REGEX, ' '),
                 installment: parseInt(movement.numeroCuotas),
                 totalInstallments: parseInt(movement.numeroTotalCuotas === '0' ? '1' : movement.numeroTotalCuotas),
             }
@@ -129,6 +164,21 @@ const calculateTotalBilledAmount = (billedMovements, usdPrice) => {
         , 0)
 }
 
+const calculateInstallmentsTotals = (billedMovements) => {
+    return billedMovements
+        .reduce((total, movement) => {
+            if(movement.totalInstallments === 1) {
+                return total
+            }
+
+            if(movement.installment === movement.totalInstallments) {
+                return total
+            }
+
+            return total + movement.amount
+        }, 0)
+}
+
 const formatAmount = (amount) => {
     return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(amount)
 }
@@ -152,6 +202,15 @@ const app = async () => {
 
         const totalBilledAmount = calculateTotalBilledAmount(notBilledMovements, usdPrice)
         console.log(`\t[=] Total movimientos no facturados: ${formatAmount(totalBilledAmount)}`)
+
+        console.log(`\t[+] Obteniendo fechas de facturación`)
+        const { nationalBillingDate, accountNumber } = await getBillingDates(cookies, cardId)
+
+        console.log(`\t[+] Obteniendo movimientos facturados nacionales`)
+        const nationalBilledMovements = await getNationalBilledMovements(cookies, cardId, nationalBillingDate[0], accountNumber)
+
+        const totalInstallments = calculateInstallmentsTotals(nationalBilledMovements)
+        console.log(`\t[=] Total cuotas: ${formatAmount(totalInstallments)}`)
     }
 }
 
