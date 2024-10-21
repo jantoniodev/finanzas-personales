@@ -1,6 +1,7 @@
 import puppeteer from 'puppeteer'
 import { randomUUID } from 'crypto'
 import chalk from 'chalk'
+import fs from 'fs/promises'
 
 const BANK_LOGIN_URL = 'https://login.portales.bancochile.cl/login'
 const BANK_PRODUCTS_URL = 'https://portalpersonas.bancochile.cl/mibancochile/rest/persona/bff-ppersonas-prd-selector/productos/obtenerProductos?incluirTarjetas=true'
@@ -322,6 +323,20 @@ class Log {
     }
 }
 
+const saveResultFile = async (data) => {
+    const resultFolderExists = await fs.stat('results').catch(() => null)
+    if(!resultFolderExists) {
+        await fs.mkdir('results')
+    }
+
+    const latestFile = await fs.stat('results/latest.json').catch(() => null)
+    if(latestFile) {
+        await fs.rename('results/latest.json', `results/${latestFile.birthtime.toISOString().replace(/:/g, '-')}.json`)
+    }
+
+    await fs.writeFile('results/latest.json', JSON.stringify(data, null, 4))
+}
+
 const app = async () => {
     Log.info('Obteniendo cookies')
     const cookies = await getCookies()
@@ -374,6 +389,16 @@ const app = async () => {
     const totalInstallments = Object.values(totals).reduce((total, card) => total + card.totalInstallments, 0)
     const totalPeriodicAmount = Object.values(totals).reduce((total, card) => total + card.totalPeriodicAmount, 0)
     const totalsAmount = totalBilledAmount + totalInstallments + totalPeriodicAmount
+
+    Log.setLevel(0).info('Guardando resultados')
+    await saveResultFile({
+        date: new Date().toISOString(),
+        totals,
+        totalBilledAmount,
+        totalInstallments,
+        totalPeriodicAmount,
+        totalsAmount
+    })
 
     Log.setLevel(0).info('Totales')
     Log.setLevel(1).result(`Total de movimientos no facturados: ${formatAmount(totalBilledAmount)}`)
