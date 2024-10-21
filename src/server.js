@@ -1,5 +1,6 @@
 import puppeteer from 'puppeteer'
 import { randomUUID } from 'crypto'
+import chalk from 'chalk'
 
 const BANK_LOGIN_URL = 'https://login.portales.bancochile.cl/login'
 const BANK_PRODUCTS_URL = 'https://portalpersonas.bancochile.cl/mibancochile/rest/persona/bff-ppersonas-prd-selector/productos/obtenerProductos?incluirTarjetas=true'
@@ -293,44 +294,70 @@ const getPredictedPeriodicMovements = async (cookies, cardId, billingDates, acco
 }
 
 const formatAmount = (amount) => {
-    return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(amount)
+    return chalk.greenBright(new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(amount))
+}
+
+class Log {
+    static level = 0
+
+    static setLevel(level) {
+        this.level = level
+        return this
+    }
+
+    static getLevelTabs() {
+        return '\t'.repeat(this.level)
+    }
+
+    static info(...message) {
+        console.log(`${this.getLevelTabs()}${chalk.blueBright('[+]')}`, ...message)
+    }
+
+    static result(...message) {
+        console.log(`${this.getLevelTabs()}${chalk.greenBright('[=]')}`, ...message)
+    }
+
+    static list(message, items) {
+        const listToken = `\n${this.getLevelTabs()}\t${chalk.cyan('-')} `
+        console.log(`${this.getLevelTabs()}${chalk.greenBright('[=]')} ${message} (${items.length}): ${listToken}${items.join(listToken)}`)
+    }
 }
 
 const app = async () => {
-    console.log('[+] Obteniendo cookies')
+    Log.info('Obteniendo cookies')
     const cookies = await getCookies()
 
     const usdPrice = await getUsdPrice(cookies)
-    console.log('[+] Precio del dólar:', usdPrice)
+    Log.info('Precio del dólar:', usdPrice)
 
-    console.log('[+] Obteniendo tarjetas de crédito')
+    Log.info('Obteniendo tarjetas de crédito')
     const creditCardsIds = await getCreditCardsIds(cookies)
-    console.log(`\t[=] Tarjetas de crédito encontradas (${creditCardsIds.length}): \n\t\t[-] ${creditCardsIds.join('\n\t\t[-] ')}`)
+    Log.setLevel(1).list('Tarjetas de crédito encontradas', creditCardsIds)
 
     for (const cardId of creditCardsIds) {
-        console.log(`[+] Tarjeta de crédito: ${cardId}`)
+        Log.setLevel(0).info(`Tarjeta de crédito: ${cardId}`)
 
-        console.log(`\t[+] Obteniendo movimientos no facturados`)
-        const notBilledMovements = await getNotBilledMovements(cookies, cardId)
-
-        console.log(`\t[+] Obteniendo fechas de facturación`)
+        Log.setLevel(1).info(`Obteniendo fechas de facturación`)
         const { nationalBillingDate, accountNumber } = await getBillingDates(cookies, cardId)
 
-        const totalBilledAmount = calculateTotalBilledAmount(notBilledMovements, usdPrice)
-        console.log(`\t\t[=] Total movimientos no facturados: ${formatAmount(totalBilledAmount)}`)
+        Log.setLevel(1).info(`Obteniendo movimientos no facturados`)
+        const notBilledMovements = await getNotBilledMovements(cookies, cardId)
 
-        console.log(`\t[+] Obteniendo movimientos facturados nacionales`)
+        const totalBilledAmount = calculateTotalBilledAmount(notBilledMovements, usdPrice)
+        Log.setLevel(2).result(`Total movimientos no facturados: ${formatAmount(totalBilledAmount)}`)
+
+        Log.setLevel(1).info(`Obteniendo movimientos facturados nacionales`)
         const nationalBilledMovements = await getNationalBilledMovements(cookies, cardId, nationalBillingDate[0], accountNumber)
 
         const totalInstallments = calculateInstallmentsTotals(nationalBilledMovements)
-        console.log(`\t\t[=] Total cuotas: ${formatAmount(totalInstallments)}`)
+        Log.setLevel(2).result(`Total cuotas: ${formatAmount(totalInstallments)}`)
 
-        console.log(`\t[+] Obteniendo movimientos recurrentes`)
+        Log.setLevel(1).info(`Obteniendo movimientos recurrentes`)
         const predictedPeriodicMovements = await getPredictedPeriodicMovements(cookies, cardId, nationalBillingDate, accountNumber)
-        console.log(`\t\t[=] Movimientos recurrentes encontrados (${predictedPeriodicMovements.length}): \n\t\t\t[-] ${predictedPeriodicMovements.map(movement => movement.description).join('\n\t\t\t[-] ')}`)
+        Log.setLevel(2).list('Movimientos recurrentes encontrados', predictedPeriodicMovements.map(movement => `${movement.description} (${formatAmount(movement.amount)})`))
         
         const totalPeriodicAmount = calculatePeriodicMovementsAmount(predictedPeriodicMovements, usdPrice)
-        console.log(`\t\t[=] Total movimientos recurrentes: ${formatAmount(totalPeriodicAmount)}`)
+        Log.setLevel(2).result(`Total movimientos recurrentes: ${formatAmount(totalPeriodicAmount)}`)
     }
 }
 
