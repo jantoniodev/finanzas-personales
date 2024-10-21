@@ -89,6 +89,25 @@ const getBillingDates = async (cookies, cardId) => {
     }
 }
 
+const getNationalBilledResume = async (cookies, cardId, billingDate, accountNumber) => {
+    const response = await fetch(BANK_BILLED_NATIONAL_MOVEMENTS, {
+        method: 'POST',
+        headers: {
+            'content-type': 'application/json',
+            'cookie': cookies
+        },
+        body: JSON.stringify({
+            idTarjeta: cardId,
+            fechaFacturacion: billingDate,
+            numeroCuenta: accountNumber
+        })
+    })
+
+    const data = await response.json()
+
+    return parseInt(data.resumen.montoFacturado)
+}
+
 const getNationalBilledMovements = async (cookies, cardId, billingDate, accountNumber) => {
     const response = await fetch(BANK_BILLED_NATIONAL_MOVEMENTS, {
         method: 'POST',
@@ -121,6 +140,25 @@ const getNationalBilledMovements = async (cookies, cardId, billingDate, accountN
                 totalInstallments: parseInt(transaction.cuotas.split('/')[1]) || 1,
             }
         })
+}
+
+const getInternationalBilledResume = async (cookies, cardId, billingDate, accountNumber) => {
+    const response = await fetch(BANK_BILLED_INTERNATIONAL_MOVEMENTS, {
+        method: 'POST',
+        headers: {
+            'content-type': 'application/json',
+            'cookie': cookies
+        },
+        body: JSON.stringify({
+            idTarjeta: cardId,
+            fechaFacturacion: billingDate,
+            numeroCuenta: accountNumber
+        })
+    })
+
+    const data = await response.json()
+
+    return parseInt(data.resumen.montoFacturado)
 }
 
 const getInternationalBilledMovements = async (cookies, cardId, billingDate, accountNumber) => {
@@ -297,6 +335,15 @@ const formatAmount = (amount) => {
     return chalk.greenBright(new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(amount))
 }
 
+const checkAlreadyBilledThisMonth = (billingDates) => {
+    const lastBillingDate = new Date(billingDates[0])
+    const today = new Date()
+
+    const sameMonth = lastBillingDate.getMonth() === today.getMonth()
+    const sameYear = lastBillingDate.getFullYear() === today.getFullYear()
+    return sameYear && sameMonth
+}
+
 class Log {
     static level = 0
 
@@ -358,6 +405,30 @@ const app = async () => {
 
         Log.setLevel(1).info(`Obteniendo fechas de facturación`)
         const { nationalBillingDate, accountNumber } = await getBillingDates(cookies, cardId)
+
+        const alreadyBilled = checkAlreadyBilledThisMonth(nationalBillingDate)
+
+        if(alreadyBilled) {
+            Log.setLevel(1).info('Ya se ha facturado este mes')
+
+            Log.setLevel(1).info('Obteniendo resumen de movimientos facturados')
+
+            const nationalBilled = await getNationalBilledResume(cookies, cardId, nationalBillingDate[0], accountNumber)
+            Log.setLevel(2).result(`Total facturado nacional: ${formatAmount(nationalBilled)}`)
+
+            const internationalBilled = await getInternationalBilledResume(cookies, cardId, nationalBillingDate[0], accountNumber)
+            Log.setLevel(2).result(`Total facturado internacional: ${formatAmount(internationalBilled * usdPrice)}`)
+
+            const totalBilled = nationalBilled + (internationalBilled * usdPrice)
+            Log.setLevel(2).result(`Total facturado: ${formatAmount(totalBilled)}`)
+
+            totals[cardId] = {
+                totalBilledAmount: totalBilled,
+                totalInstallments: 0,
+                totalPeriodicAmount: 0
+            }
+            continue
+        }
 
         Log.setLevel(1).info(`Obteniendo movimientos no facturados`)
         const notBilledMovements = await getNotBilledMovements(cookies, cardId)
