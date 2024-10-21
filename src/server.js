@@ -246,6 +246,8 @@ const compareMovements = (movementA, movementB) => {
 }
 
 const getPredictedPeriodicMovements = async (cookies, cardId, billingDates, accountNumber) => {
+    const notBilledMovements = await getNotBilledMovements(cookies, cardId)
+
     const internationalBilledMovements = await Promise.all([
         getInternationalBilledMovements(cookies, cardId, billingDates[0], accountNumber),
         getInternationalBilledMovements(cookies, cardId, billingDates[1], accountNumber),
@@ -257,37 +259,30 @@ const getPredictedPeriodicMovements = async (cookies, cardId, billingDates, acco
     ])
 
     const allMovements = [
+        ...(notBilledMovements),
         ...(internationalBilledMovements.flatMap(movements => movements)),
         ...(nationalBilledMovements.flatMap(movements => movements))
     ]
 
-    const comparedPeriodicMovements = new Set()
+    const periodicMovements = []
 
-    const periodicMovements = allMovements
+    allMovements
         .filter(movement => movement.totalInstallments === 1)
-        .filter(movement => {
-            return allMovements.some(otherMovement => {
-                if (movement === otherMovement) {
-                    return false
-                }
+        .forEach(movement => {
+            const isAlreadyPredicted = periodicMovements.some(predictedMovement => compareMovements(predictedMovement, movement))
 
-                const areEqual = compareMovements(movement, otherMovement)
+            if(isAlreadyPredicted) {
+                return
+            }
 
-                if (!areEqual) {
-                    return false
-                }
+            const similarMovements = allMovements.filter(otherMovement =>
+                otherMovement !== movement &&
+                compareMovements(otherMovement, movement)
+            )
 
-                const id = `${movement.id}-${otherMovement.id}`
-                const reversedId = `${otherMovement.id}-${movement.id}`
-
-                if (comparedPeriodicMovements.has(id) || comparedPeriodicMovements.has(reversedId)) {
-                    return false
-                }
-
-                comparedPeriodicMovements.add(id)
-
-                return true
-            })
+            if(similarMovements.length >= 2) {
+                periodicMovements.push(movement)
+            }
         })
 
     return periodicMovements
