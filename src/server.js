@@ -334,6 +334,8 @@ const app = async () => {
     const creditCardsIds = await getCreditCardsIds(cookies)
     Log.setLevel(1).list('Tarjetas de crédito encontradas', creditCardsIds)
 
+    const totals = {}
+
     for (const cardId of creditCardsIds) {
         Log.setLevel(0).info(`Tarjeta de crédito: ${cardId}`)
 
@@ -358,7 +360,24 @@ const app = async () => {
         
         const totalPeriodicAmount = calculatePeriodicMovementsAmount(predictedPeriodicMovements, usdPrice)
         Log.setLevel(2).result(`Total movimientos recurrentes: ${formatAmount(totalPeriodicAmount)}`)
+
+        totals[cardId] = {
+            totalBilledAmount,
+            totalInstallments,
+            totalPeriodicAmount
+        }
     }
+
+    const totalBilledAmount = Object.values(totals).reduce((total, card) => total + card.totalBilledAmount, 0)
+    const totalInstallments = Object.values(totals).reduce((total, card) => total + card.totalInstallments, 0)
+    const totalPeriodicAmount = Object.values(totals).reduce((total, card) => total + card.totalPeriodicAmount, 0)
+    const totalsAmount = totalBilledAmount + totalInstallments + totalPeriodicAmount
+
+    Log.setLevel(0).info('Totales')
+    Log.setLevel(1).result(`Total de movimientos no facturados: ${formatAmount(totalBilledAmount)}`)
+    Log.setLevel(1).result(`Total de cuotas: ${formatAmount(totalInstallments)}`)
+    Log.setLevel(1).result(`Total de movimientos recurrentes: ${formatAmount(totalPeriodicAmount)}`)
+    Log.setLevel(1).result(`Total de movimientos: ${formatAmount(totalsAmount)}`)
 }
 
 await app()
