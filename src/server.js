@@ -43,7 +43,7 @@ const getCookies = async () => {
     return formattedCookies
 }
 
-const getCreditCardsIds = async (cookies) => {
+const getCreditCards = async (cookies) => {
     const response = await fetch(BANK_PRODUCTS_URL, {
         headers: {
             'cookie': cookies
@@ -52,11 +52,15 @@ const getCreditCardsIds = async (cookies) => {
 
     const data = await response.json()
 
-    const creditCardsIds = data.productos
+    const creditCards = data.productos
         .filter(product => product.codigo === 'TNM')
-        .map(product => product.id)
+        .map(product => ({
+            id: product.id,
+            name: product.descripcionLogo.trim(),
+            number: product.mascara.replaceAll('*', '').trim()
+        }))
 
-    return creditCardsIds
+    return creditCards
 }
 
 const getBillingDates = async (cookies, cardId) => {
@@ -326,13 +330,16 @@ const app = async () => {
     Log.info('Precio del dólar:', usdPrice)
 
     Log.info('Obteniendo tarjetas de crédito')
-    const creditCardsIds = await getCreditCardsIds(cookies)
-    Log.setLevel(1).list('Tarjetas de crédito encontradas', creditCardsIds)
+    const creditCards = await getCreditCards(cookies)
+    const creditCardsNames = creditCards.map(card => `${card.name} (${card.number})`)
+    Log.setLevel(1).list('Tarjetas de crédito encontradas', creditCardsNames)
 
     const totals = {}
 
-    for (const cardId of creditCardsIds) {
-        Log.setLevel(0).info(`Tarjeta de crédito: ${cardId}`)
+    for (const card of creditCards) {
+        const cardId = card.id
+
+        Log.setLevel(0).info(`Tarjeta de crédito: ${card.name} (${card.number})`)
 
         Log.setLevel(1).info(`Obteniendo fechas de facturación`)
         const { nationalBillingDate, accountNumber } = await getBillingDates(cookies, cardId)
