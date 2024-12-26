@@ -158,6 +158,10 @@ const getInternationalBilledResume = async (cookies, cardId, billingDate, accoun
 
     const data = await response.json()
 
+    if(!data?.resumen?.montoFacturado) {
+        return 0
+    }
+
     return parseInt(data.resumen.montoFacturado)
 }
 
