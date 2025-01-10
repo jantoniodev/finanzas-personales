@@ -2,6 +2,7 @@ import puppeteer from 'puppeteer'
 import { randomUUID } from 'crypto'
 import chalk from 'chalk'
 import fs from 'fs/promises'
+import { read } from 'fs'
 
 const BANK_LOGIN_URL = 'https://login.portales.bancochile.cl/login'
 const BANK_PRODUCTS_URL = 'https://portalpersonas.bancochile.cl/mibancochile/rest/persona/bff-ppersonas-prd-selector/productos/obtenerProductos?incluirTarjetas=true'
@@ -181,7 +182,7 @@ const getInternationalBilledMovements = async (cookies, cardId, billingDate, acc
 
     const data = await response.json()
 
-    return data.seccionCompras.transaccionesTarjetas
+    return (data.seccionCompras?.transaccionesTarjetas || [])
         .filter(transaction => transaction.totales === false)
         .map(transaction => {
             return {
@@ -388,6 +389,15 @@ const saveResultFile = async (data) => {
     await fs.writeFile('results/latest.json', JSON.stringify(data, null, 4))
 }
 
+const readFixedSpences = async () => {
+    const data = await fs.readFile('data/fixedSpences.json')
+    return JSON.parse(data)
+}
+
+const calculateTotalFixedSpences = (fixedSpences) => {
+    return fixedSpences.reduce((total, spence) => total + spence.amount, 0)
+}
+
 const app = async () => {
     Log.info('Obteniendo cookies')
     const cookies = await getCookies()
@@ -465,6 +475,11 @@ const app = async () => {
     const totalPeriodicAmount = Object.values(totals).reduce((total, card) => total + card.totalPeriodicAmount, 0)
     const totalsAmount = totalBilledAmount + totalInstallments + totalPeriodicAmount
 
+    const fixedSpences = await readFixedSpences()
+    const totalFixedSpences = calculateTotalFixedSpences(fixedSpences)
+    Log.setLevel(0).info('Gastos fijos')
+    Log.setLevel(1).list('Gastos fijos encontrados', fixedSpences.map(spence => `${spence.name} (${formatAmount(spence.amount)})`))
+
     Log.setLevel(0).info('Guardando resultados')
     await saveResultFile({
         date: new Date().toISOString(),
@@ -480,6 +495,8 @@ const app = async () => {
     Log.setLevel(1).result(`Total de cuotas: ${formatAmount(totalInstallments)}`)
     Log.setLevel(1).result(`Total de movimientos recurrentes: ${formatAmount(totalPeriodicAmount)}`)
     Log.setLevel(1).result(`Total de movimientos: ${formatAmount(totalsAmount)}`)
+    Log.setLevel(1).result(`Total de gastos fijos: ${formatAmount(totalFixedSpences)}`)
+    Log.setLevel(1).result(`Total de gastos: ${formatAmount(totalsAmount + totalFixedSpences)}`)
 }
 
 await app()
