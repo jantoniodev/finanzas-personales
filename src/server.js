@@ -394,8 +394,13 @@ const readFixedSpences = async () => {
     return JSON.parse(data)
 }
 
-const calculateTotalFixedSpences = (fixedSpences) => {
-    return fixedSpences.reduce((total, spence) => total + spence.amount, 0)
+const calculateTotalsFromFiles = (totals) => {
+    return totals.reduce((total, spence) => total + spence.amount, 0)
+}
+
+const readIncomes = async () => {
+    const data = await fs.readFile('data/incomes.json')
+    return JSON.parse(data)
 }
 
 const app = async () => {
@@ -476,9 +481,15 @@ const app = async () => {
     const totalsAmount = totalBilledAmount + totalInstallments + totalPeriodicAmount
 
     const fixedSpences = await readFixedSpences()
-    const totalFixedSpences = calculateTotalFixedSpences(fixedSpences)
+    const totalFixedSpences = calculateTotalsFromFiles(fixedSpences)
     Log.setLevel(0).info('Gastos fijos')
     Log.setLevel(1).list('Gastos fijos encontrados', fixedSpences.map(spence => `${spence.name} (${formatAmount(spence.amount)})`))
+
+    const incomes = await readIncomes()
+    const totalIncomes = calculateTotalsFromFiles(incomes)
+    Log.setLevel(0).info('Ingresos')
+    Log.setLevel(1).list('Ingresos encontrados', incomes.map(income => `${income.name} (${formatAmount(income.amount)})`))
+
 
     Log.setLevel(0).info('Guardando resultados')
     await saveResultFile({
@@ -490,13 +501,17 @@ const app = async () => {
         totalsAmount
     })
 
+    const totalSpences = totalsAmount + totalFixedSpences
+
     Log.setLevel(0).info('Totales')
     Log.setLevel(1).result(`Total de movimientos no facturados: ${formatAmount(totalBilledAmount)}`)
     Log.setLevel(1).result(`Total de cuotas: ${formatAmount(totalInstallments)}`)
     Log.setLevel(1).result(`Total de movimientos recurrentes: ${formatAmount(totalPeriodicAmount)}`)
     Log.setLevel(1).result(`Total de movimientos: ${formatAmount(totalsAmount)}`)
     Log.setLevel(1).result(`Total de gastos fijos: ${formatAmount(totalFixedSpences)}`)
-    Log.setLevel(1).result(`Total de gastos: ${formatAmount(totalsAmount + totalFixedSpences)}`)
+    Log.setLevel(1).result(`Total de gastos: ${formatAmount(totalSpences)}`)
+    Log.setLevel(1).result(`Total de ingresos: ${formatAmount(totalIncomes)}`)
+    Log.setLevel(1).result(`Saldo: ${formatAmount(totalIncomes - (totalSpences))}`)
 }
 
 await app()
